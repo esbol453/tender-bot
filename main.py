@@ -1,6 +1,7 @@
 import logging
 import requests
 from bs4 import BeautifulSoup
+from html import escape  # Для экранирования текста
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -87,7 +88,6 @@ def parse_samruk():
             except:
                 pass
 
-            # Фильтр по дате
             tender_date = None
             try:
                 tender_date = datetime.strptime(date_text, "%d.%m.%Y")
@@ -129,7 +129,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# --- /monitor: кнопки ---
+# --- /monitor ---
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -145,6 +145,23 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Выберите источник тендеров:",
         reply_markup=reply_markup
     )
+
+
+# --- Отправка сообщений с экранированием ---
+async def send_tenders(chat_id, tenders, site_name, bot):
+    if not tenders:
+        await bot.send_message(chat_id=chat_id, text=f"[{site_name}] Новых тендеров нет.")
+    else:
+        for t in tenders:
+            safe_title = escape(t["title"])
+            safe_url = t["url"] if t["url"].startswith("http") else "https://zakup.sk.kz"
+            msg = (
+                f"🔹 [{site_name}] <b>{safe_title}</b>\n"
+                f"💰 {t['price']}\n"
+                f"📅 {t['date']}\n"
+                f"🔗 <a href='{safe_url}'>Подробнее</a>"
+            )
+            await bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
 
 
 # --- Обработка кнопок ---
@@ -164,50 +181,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for site_name, parser in sources:
         tenders = parser()
-        if not tenders:
-            await context.bot.send_message(chat_id=chat_id, text=f"[{site_name}] Новых тендеров нет.")
-        else:
-            for t in tenders:
-                msg = (
-                    f"🔹 [{site_name}] <b>{t['title']}</b>\n"
-                    f"💰 {t['price']}\n"
-                    f"📅 {t['date']}\n"
-                    f"🔗 <a href='{t['url']}'>Подробнее</a>"
-                )
-                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+        await send_tenders(chat_id, tenders, site_name, context.bot)
 
 
 # --- Отдельные команды /goszakup и /samruk ---
 async def goszakup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tenders = parse_goszakup()
-    if not tenders:
-        await context.bot.send_message(chat_id=chat_id, text="Госзакуп: Новых тендеров нет.")
-    else:
-        for t in tenders:
-            msg = (
-                f"🔹 [Госзакуп] <b>{t['title']}</b>\n"
-                f"💰 {t['price']}\n"
-                f"📅 {t['date']}\n"
-                f"🔗 <a href='{t['url']}'>Подробнее</a>"
-            )
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+    await send_tenders(chat_id, tenders, "Госзакуп", context.bot)
 
 
 async def samruk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tenders = parse_samruk()
-    if not tenders:
-        await context.bot.send_message(chat_id=chat_id, text="Самрук-Казына: Новых тендеров нет.")
-    else:
-        for t in tenders:
-            msg = (
-                f"🔹 [Самрук-Казына] <b>{t['title']}</b>\n"
-                f"💰 {t['price']}\n"
-                f"📅 {t['date']}\n"
-                f"🔗 <a href='{t['url']}'>Подробнее</a>"
-            )
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+    await send_tenders(chat_id, tenders, "Самрук-Казына", context.bot)
 
 
 # --- Запуск приложения ---
