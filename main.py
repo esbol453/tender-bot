@@ -10,7 +10,7 @@ from telegram.ext import (
 
 TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
 
-# --- Госзакуп парсинг ---
+
 def parse_goszakup():
     url = "https://goszakup.gov.kz/ru/announcements"
     tenders = []
@@ -45,10 +45,10 @@ def parse_goszakup():
                         "url": link
                     })
     except Exception as e:
-        tenders.append({"title": f"Ошибка при загрузке Госзакуп: {e}", "price": "", "date": "", "url": ""})
+        tenders.append({"title": f"Ошибка при загрузке: {e}", "price": "", "date": "", "url": ""})
     return tenders
 
-# --- Telegram команды ---
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я бот для мониторинга тендеров.\n"
@@ -59,11 +59,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Команда: /monitor"
     )
 
+
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
     tenders = parse_goszakup()
     if not tenders:
-        await context.bot.send_message(chat_id=chat_id, text="Новых тендеров нет.")
+        await update.message.reply_text("Новых тендеров нет.")
     for t in tenders:
         msg = (
             f"🔹 <b>{t['title']}</b>\n"
@@ -71,11 +71,12 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📅 {t['date']}\n"
             f"🔗 <a href='{t['url']}'>Подробнее</a>"
         )
-        await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+        await update.message.reply_text(msg, parse_mode="HTML")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("monitor", monitor))
-    app.run_polling()
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("monitor", monitor))
+    application.run_polling()
