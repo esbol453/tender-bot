@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
 
+
 # --- Госзакуп ---
 def parse_goszakup():
     url = "https://goszakup.gov.kz/ru/announcements"
@@ -27,45 +28,37 @@ def parse_goszakup():
         rows = soup.select("table.table tbody tr")[:20]
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) >= 6:
+            if len(cols) >= 7:
                 title = cols[1].text.strip()
+                description = cols[2].text.strip()
                 price_text = cols[4].text.strip().replace(" ", "").replace(" ", "")
-                date_text = cols[3].text.strip()
-                status = cols[5].text.strip()
+                procedure = cols[5].text.strip()
+                status = cols[6].text.strip()
                 link = "https://goszakup.gov.kz" + cols[1].find("a")["href"]
-
-                if status != "Опубликован (прием ценовых предложений)":
-                    continue
 
                 try:
                     price_value = float(price_text.replace("тг", "").replace(",", ".").strip())
                 except:
                     price_value = 0
 
-                try:
-                    tender_date = datetime.strptime(date_text, "%d.%m.%Y")
-                except:
-                    tender_date = None
-
-                if tender_date and tender_date < datetime.now() - timedelta(days=5):
-                    continue
-
                 if (
-                    ("Мангистауская" in title or "Мангистауская" in cols[2].text)
-                    and ("Запрос ценовых предложений" in title)
-                    and (price_value <= 1_000_000)
-                    and ("Товар" in title or "Товары" in title)
+                    ("Мангистауская" in title or "Мангистауская" in description)
+                    and "Запрос ценовых предложений" in procedure
+                    and "Опубликован" in status
+                    and price_value <= 1_000_000
+                    and ("Товар" in title or "Товары" in title or "Товар" in description)
                 ):
                     tenders.append({
-                        "title": title,
+                        "title": f"{title} - {description}",
                         "price": price_text,
-                        "date": date_text,
+                        "date": status,
                         "url": link
                     })
 
     except Exception as e:
         tenders.append({"title": f"Ошибка при загрузке Госзакуп: {e}", "price": "", "date": "", "url": ""})
     return tenders
+
 
 # --- Самрук-Казына ---
 def parse_samruk():
@@ -115,6 +108,7 @@ def parse_samruk():
         tenders.append({"title": f"Ошибка при загрузке Самрук: {e}", "price": "", "date": "", "url": ""})
     return tenders
 
+
 # --- /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -128,6 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/goszakup — показать с Госзакуп\n"
         "/samruk — показать с Самрук-Казына"
     )
+
 
 # --- /monitor ---
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,6 +141,7 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+
 # --- Отправка сообщений ---
 async def send_tenders(chat_id, tenders, site_name, bot):
     if not tenders:
@@ -161,6 +157,7 @@ async def send_tenders(chat_id, tenders, site_name, bot):
                 f"🔗 <a href='{safe_url}'>Подробнее</a>"
             )
             await bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+
 
 # --- Обработка кнопок ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,17 +178,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tenders = parser()
         await send_tenders(chat_id, tenders, site_name, context.bot)
 
-# --- /goszakup ---
+
+# --- Отдельные команды ---
 async def goszakup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tenders = parse_goszakup()
     await send_tenders(chat_id, tenders, "Госзакуп", context.bot)
 
-# --- /samruk ---
+
 async def samruk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tenders = parse_samruk()
     await send_tenders(chat_id, tenders, "Самрук-Казына", context.bot)
+
 
 # --- Запуск приложения ---
 if __name__ == "__main__":
