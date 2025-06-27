@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 from datetime import datetime, timedelta
 
-TOKEN = "ТВОЙ_ТОКЕН"
+TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
 
 # --- Госзакуп ---
 def parse_goszakup():
