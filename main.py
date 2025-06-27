@@ -2,7 +2,7 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, JobQueue
+from telegram.ext import Application, ApplicationBuilder, ContextTypes, CommandHandler, JobQueue
 
 TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
 
