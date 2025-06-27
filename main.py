@@ -1,4 +1,3 @@
-
 import logging
 import requests
 from bs4 import BeautifulSoup
@@ -14,7 +13,7 @@ def parse_goszakup():
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
-        rows = soup.select("table.table tbody tr")[:10]  # проверяем больше строк
+        rows = soup.select("table.table tbody tr")[:10]
         for row in rows:
             cols = row.find_all("td")
             if len(cols) >= 5:
@@ -26,7 +25,6 @@ def parse_goszakup():
                     price_value = float(price_text.replace("тг", "").replace(",", ".").strip())
                 except:
                     price_value = 0
-                # Фильтрация
                 if (
                     "Мангистауская" in title or "Мангистауская" in cols[2].text
                 ) and (
@@ -59,7 +57,6 @@ def parse_samruk():
             price = tender.get("price", "0")
             procedure = tender.get("procedure", "")
             category = tender.get("category", "")
-            # Фильтрация
             price_value = 0
             try:
                 price_value = float(str(price).replace(" ", "").replace(",", "."))
@@ -84,34 +81,25 @@ def parse_samruk():
 # --- Telegram команды ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я бот для мониторинга тендеров.
-"
-        "Регион: Мангистауская область
-"
-        "Категория: Товары
-"
-        "Тип: Запрос ценовых предложений
-"
-        "Сумма: до 1 000 000 тг
-"
-        "Команда: /monitor"
+        "Привет! Я бот для мониторинга тендеров.\n"
+        "🔹 Регион: Мангистауская область\n"
+        "🔹 Категория: Товары\n"
+        "🔹 Тип: Запрос ценовых предложений\n"
+        "🔹 Сумма: до 1 000 000 тг\n\n"
+        "Чтобы начать мониторинг, введи команду: /monitor"
     )
 
 async def check_tenders(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.chat_id
-
     for site_name, parser in [("Госзакуп", parse_goszakup), ("Самрук-Казына", parse_samruk)]:
         tenders = parser()
         if not tenders:
             await context.bot.send_message(chat_id=chat_id, text=f"[{site_name}] Новых тендеров нет.")
         for t in tenders:
             msg = (
-                f"🔹 [{site_name}] <b>{t['title']}</b>
-"
-                f"💰 {t['price']}
-"
-                f"📅 {t['date']}
-"
+                f"🔹 [{site_name}] <b>{t['title']}</b>\n"
+                f"💰 {t['price']}\n"
+                f"📅 {t['date']}\n"
                 f"🔗 <a href='{t['url']}'>Подробнее</a>"
             )
             await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
