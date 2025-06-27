@@ -1,7 +1,7 @@
 import logging
 import requests
 from bs4 import BeautifulSoup
-from html import escape  # Для экранирования текста
+from html import escape
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 
 TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
 
-
 # --- Госзакуп ---
 def parse_goszakup():
     url = "https://goszakup.gov.kz/ru/announcements"
@@ -28,11 +27,15 @@ def parse_goszakup():
         rows = soup.select("table.table tbody tr")[:20]
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) >= 5:
+            if len(cols) >= 6:
                 title = cols[1].text.strip()
                 price_text = cols[4].text.strip().replace(" ", "").replace(" ", "")
                 date_text = cols[3].text.strip()
+                status = cols[5].text.strip()
                 link = "https://goszakup.gov.kz" + cols[1].find("a")["href"]
+
+                if status != "Опубликован (прием ценовых предложений)":
+                    continue
 
                 try:
                     price_value = float(price_text.replace("тг", "").replace(",", ".").strip())
@@ -63,7 +66,6 @@ def parse_goszakup():
     except Exception as e:
         tenders.append({"title": f"Ошибка при загрузке Госзакуп: {e}", "price": "", "date": "", "url": ""})
     return tenders
-
 
 # --- Самрук-Казына ---
 def parse_samruk():
@@ -113,7 +115,6 @@ def parse_samruk():
         tenders.append({"title": f"Ошибка при загрузке Самрук: {e}", "price": "", "date": "", "url": ""})
     return tenders
 
-
 # --- /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -127,7 +128,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/goszakup — показать с Госзакуп\n"
         "/samruk — показать с Самрук-Казына"
     )
-
 
 # --- /monitor ---
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,8 +146,7 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-
-# --- Отправка сообщений с экранированием ---
+# --- Отправка сообщений ---
 async def send_tenders(chat_id, tenders, site_name, bot):
     if not tenders:
         await bot.send_message(chat_id=chat_id, text=f"[{site_name}] Новых тендеров нет.")
@@ -162,7 +161,6 @@ async def send_tenders(chat_id, tenders, site_name, bot):
                 f"🔗 <a href='{safe_url}'>Подробнее</a>"
             )
             await bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-
 
 # --- Обработка кнопок ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -183,19 +181,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tenders = parser()
         await send_tenders(chat_id, tenders, site_name, context.bot)
 
-
-# --- Отдельные команды /goszakup и /samruk ---
+# --- /goszakup ---
 async def goszakup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tenders = parse_goszakup()
     await send_tenders(chat_id, tenders, "Госзакуп", context.bot)
 
-
+# --- /samruk ---
 async def samruk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tenders = parse_samruk()
     await send_tenders(chat_id, tenders, "Самрук-Казына", context.bot)
-
 
 # --- Запуск приложения ---
 if __name__ == "__main__":
