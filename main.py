@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 
 TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
 
+
 # --- Госзакуп ---
 def parse_goszakup():
     url = "https://goszakup.gov.kz/ru/announcements"
@@ -48,7 +49,7 @@ def parse_goszakup():
                 if (
                     ("Мангистауская" in title or "Мангистауская" in cols[2].text)
                     and ("Запрос ценовых предложений" in title)
-                    and (price_value <= 1000000)
+                    and (price_value <= 1_000_000)
                     and ("Товар" in title or "Товары" in title)
                 ):
                     tenders.append({
@@ -62,12 +63,15 @@ def parse_goszakup():
         tenders.append({"title": f"Ошибка при загрузке Госзакуп: {e}", "price": "", "date": "", "url": ""})
     return tenders
 
+
 # --- Самрук-Казына ---
 def parse_samruk():
     url = "https://zakup.sk.kz/api/tenders"
     tenders = []
     try:
         response = requests.get(url, timeout=10)
+        if not response.headers.get("Content-Type", "").startswith("application/json"):
+            raise ValueError("API не вернул JSON. Возможно, требуется авторизация.")
         data = response.json()
         for tender in data.get("data", []):
             title = tender.get("title", "")
@@ -83,12 +87,21 @@ def parse_samruk():
             except:
                 pass
 
-            # Пример фильтрации без даты
+            # Фильтр по дате
+            tender_date = None
+            try:
+                tender_date = datetime.strptime(date_text, "%d.%m.%Y")
+            except:
+                pass
+
+            if tender_date and tender_date < datetime.now() - timedelta(days=5):
+                continue
+
             if (
                 "Мангистауская" in region
                 and "Запрос ценовых предложений" in procedure
                 and "Товар" in category
-                and price_value <= 1000000
+                and price_value <= 1_000_000
             ):
                 tenders.append({
                     "title": title,
@@ -100,18 +113,23 @@ def parse_samruk():
         tenders.append({"title": f"Ошибка при загрузке Самрук: {e}", "price": "", "date": "", "url": ""})
     return tenders
 
+
 # --- /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я бот для мониторинга тендеров.\n"
+        "Привет! Я бот для мониторинга тендеров.\n\n"
         "Регион: Мангистауская область\n"
         "Категория: Товары\n"
         "Тип: Запрос ценовых предложений\n"
-        "Сумма: до 1 000 000 тг\n"
-        "Команда: /monitor"
+        "Сумма: до 1 000 000 тг\n\n"
+        "Команды:\n"
+        "/monitor — выбрать источник\n"
+        "/goszakup — показать с Госзакуп\n"
+        "/samruk — показать с Самрук-Казына"
     )
 
-# --- /monitor: показать меню ---
+
+# --- /monitor: кнопки ---
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -128,7 +146,8 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# --- Обработка нажатий кнопок ---
+
+# --- Обработка кнопок ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -157,6 +176,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
 
+
+# --- Отдельные команды /goszakup и /samruk ---
+async def goszakup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    tenders = parse_goszakup()
+    if not tenders:
+        await context.bot.send_message(chat_id=chat_id, text="Госзакуп: Новых тендеров нет.")
+    else:
+        for t in tenders:
+            msg = (
+                f"🔹 [Госзакуп] <b>{t['title']}</b>\n"
+                f"💰 {t['price']}\n"
+                f"📅 {t['date']}\n"
+                f"🔗 <a href='{t['url']}'>Подробнее</a>"
+            )
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+
+
+async def samruk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    tenders = parse_samruk()
+    if not tenders:
+        await context.bot.send_message(chat_id=chat_id, text="Самрук-Казына: Новых тендеров нет.")
+    else:
+        for t in tenders:
+            msg = (
+                f"🔹 [Самрук-Казына] <b>{t['title']}</b>\n"
+                f"💰 {t['price']}\n"
+                f"📅 {t['date']}\n"
+                f"🔗 <a href='{t['url']}'>Подробнее</a>"
+            )
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+
+
 # --- Запуск приложения ---
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -164,6 +217,8 @@ if __name__ == "__main__":
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("monitor", monitor))
+    app.add_handler(CommandHandler("goszakup", goszakup_command))
+    app.add_handler(CommandHandler("samruk", samruk_command))
     app.add_handler(CallbackQueryHandler(button_handler))
 
     app.run_polling()
