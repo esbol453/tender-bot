@@ -1,16 +1,16 @@
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import requests
 from bs4 import BeautifulSoup
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
+TOKEN = "твой_токен"
 
 BASE_URL = "https://goszakup.gov.kz/ru/search/lots"
 FILTERS = {
-    "filter[method][]": "3",          # Запрос ценовых предложений
-    "filter[status][]": "240",        # Опубликован (прием ценовых предложений)
-    "filter[kato]": "470000000",      # Мангистауская область
-    "filter[amount_to]": "1000000",   # До 1 000 000
+    "filter[method][]": "3",
+    "filter[status][]": "240",
+    "filter[kato]": "470000000",
+    "filter[amount_to]": "1000000",
     "page": 1
 }
 
@@ -78,12 +78,8 @@ async def goszakup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(text)
 
-async def main():
+if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("goszakup", goszakup_command))
     print("Бот запущен...")
-    await app.run_polling()
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    app.run_polling()
