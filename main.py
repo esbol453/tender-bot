@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 
-def parse_goszakup_filtered(max_pages=7):
+def parse_goszakup_filtered_debug(max_pages=3):
     base_url = "https://goszakup.gov.kz/ru/search/lots"
     tenders = []
 
@@ -13,7 +13,7 @@ def parse_goszakup_filtered(max_pages=7):
             "filter[amount_to]": "1000000",
             "page": page
         }
-        print(f"Парсим страницу {page}...")  # Для отладки
+        print(f"Парсим страницу {page}...")
         response = requests.get(base_url, params=params)
         if response.status_code != 200:
             print(f"Ошибка загрузки страницы {page}: статус {response.status_code}")
@@ -37,25 +37,14 @@ def parse_goszakup_filtered(max_pages=7):
             method = cols[5].get_text(strip=True)
             status = cols[6].get_text(strip=True)
 
-            # Проверка на наличие слова "Товар" в названии или описании
-            if "Товар" not in title and "Товар" not in description:
-                continue
-            # Проверяем метод закупки
-            if method != "Запрос ценовых предложений":
-                continue
-            # Проверяем статус
-            if status != "Опубликован (прием ценовых предложений)":
-                continue
+            print(f"Заголовок: {title}")
+            print(f"Описание: {description}")
+            print(f"Метод: {method}")
+            print(f"Статус: {status}")
+            print(f"Цена: {price}")
+            print("---")
 
-            # Преобразуем цену в число для фильтрации
-            try:
-                price_num = float(price.replace(" ", "").replace(",", "."))
-            except:
-                price_num = 0
-
-            if price_num > 1000000:
-                continue
-
+            # Добавляем все лоты без фильтра по "Товар" для отладки
             tenders.append({
                 "title": title,
                 "description": description,
@@ -69,9 +58,8 @@ def parse_goszakup_filtered(max_pages=7):
 
 
 if __name__ == "__main__":
-    tenders = parse_goszakup_filtered()
+    tenders = parse_goszakup_filtered_debug()
     if tenders:
-        for t in tenders:
-            print(f"🔹 {t['title']}\nОписание: {t['description']}\nКоличество: {t['quantity']}\nСумма: {t['price']} тг\nСтатус: {t['status']}\n")
+        print(f"Всего лотов за 3 страницы: {len(tenders)}")
     else:
         print("[Госзакуп] Новых тендеров нет.")
