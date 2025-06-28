@@ -1,48 +1,48 @@
-import logging
 import requests
 from bs4 import BeautifulSoup
-from html import escape
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-from datetime import datetime, timedelta
 
-TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
-
-# URL с фильтрами Госзакуп
-GOSZAKUP_URL = (
-    "https://goszakup.gov.kz/ru/search/lots?"
-    "filter%5Bmethod%5D%5B%5D=3&"                 # Запрос ценовых предложений
-    "filter%5Bstatus%5D%5B%5D=240&"                # Опубликован (прием ценовых предложений)
-    "filter%5Bkato%5D=470000000&"                   # Мангистауская область
-    "filter%5Bamount_to%5D=1000000"                 # Сумма до 1 000 000 тг
-)
-
-def parse_goszakup():
+def parse_goszakup_filtered(max_pages=7):
+    base_url = "https://goszakup.gov.kz/ru/search/lots"
+    params = {
+        "filter[method][]": "3",           # Запрос ценовых предложений
+        "filter[status][]": "240",         # Опубликован (прием ценовых предложений)
+        "filter[kato]": "470000000",       # Мангистауская область
+        "filter[amount_to]": "1000000",    # до 1 000 000 тг
+        "page": 1
+    }
     tenders = []
-    try:
-        response = requests.get(GOSZAKUP_URL, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
 
-        rows = soup.select("table.table tbody tr")
+    for page in range(1, max_pages + 1):
+        params["page"] = page
+        response = requests.get(base_url, params=params)
+        soup = BeautifulSoup(response.text, "html.parser")
+        rows = soup.select("table tbody tr")
+        if not rows:
+            break  # Если лоты на странице закончились
+
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) < 6:
+            if len(cols) < 7:
                 continue
 
-            title = cols[1].get_text(strip=True)
-            description = cols[2].get_text(strip=True)
-            quantity = cols[3].get_text(strip=True)
-            price = cols[4].get_text(strip=True)
-            method = cols[5].get_text(strip=True)
-            status = cols[6].get_text(strip=True) if len(cols) > 6 else ""
+            title = cols[1].text.strip()
+            description = cols[2].text.strip()
+            quantity = cols[3].text.strip()
+            price = cols[4].text.strip()
+            method = cols[5].text.strip()
+            status = cols[6].text.strip()
 
-            # Фильтр, на всякий случай — но сайт уже фильтрует
-            if "Мангистауская" not in description and "Мангистауская" not in title:
+            # Проверяем фильтры
+            if "Товар" not in title and "Товар" not in description:
                 continue
-            if "Запрос ценовых предложений" not in method:
+            if method != "Запрос ценовых предложений":
                 continue
-            if "Опубликован" not in status:
+            if status != "Опубликован (прием ценовых предложений)":
+                continue
+
+            # Дополнительно можно проверить цену (убрать пробелы, привести к числу)
+            price_num = float(price.replace(" ", "").replace(",", "."))
+            if price_num > 1000000:
                 continue
 
             tenders.append({
@@ -50,47 +50,17 @@ def parse_goszakup():
                 "description": description,
                 "quantity": quantity,
                 "price": price,
-                "status": status
+                "method": method,
+                "status": status,
             })
-
-    except Exception as e:
-        tenders.append({"title": f"Ошибка при загрузке Госзакуп: {e}", "description": "", "quantity": "", "price": "", "status": ""})
 
     return tenders
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привет! Я бот мониторю Госзакупы по Мангистаускому региону.\n\n"
-        "Команды:\n"
-        "/goszakup — показать актуальные тендеры"
-    )
-
-async def goszakup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    tenders = parse_goszakup()
-
-    if not tenders or (len(tenders) == 1 and "Ошибка" in tenders[0]["title"]):
-        await context.bot.send_message(chat_id=chat_id, text="[Госзакуп] Новых тендеров нет.")
-        return
-
-    for t in tenders:
-        msg = (
-            f"🔹 <b>{escape(t['title'])}</b>\n"
-            f"Описание: {escape(t['description'])}\n"
-            f"Количество: {escape(t['quantity'])}\n"
-            f"Сумма: {escape(t['price'])} тг\n"
-            f"Статус: {escape(t['status'])}\n"
-        )
-        await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("goszakup", goszakup_command))
-
-    print("Бот запущен...")
-    app.run_polling()
+    all_tenders = parse_goszakup_filtered()
+    if all_tenders:
+        for t in all_tenders:
+            print(f"🔹 {t['title']}\nОписание: {t['description']}\nКоличество: {t['quantity']}\nСумма: {t['price']} тг\nСтатус: {t['status']}\n")
+    else:
+        print("[Госзакуп] Новых тендеров нет.")
