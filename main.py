@@ -1,28 +1,33 @@
 import requests
 from bs4 import BeautifulSoup
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-def parse_goszakup_filtered_debug(max_pages=3):
-    base_url = "https://goszakup.gov.kz/ru/search/lots"
+# Вставь сюда свой токен
+TOKEN = "7008967829:AAHIcif9vD-j1gxYPGbQ5X7UY-0s2W3dqnk"
+
+# Функция парсинга госзакупок с фильтрами
+def parse_tenders():
     tenders = []
+    base_url = "https://goszakup.gov.kz/ru/search/lots"
+    params = {
+        "filter[method][]": "3",  # Запрос ценовых предложений
+        "filter[status][]": "240",  # Опубликован (прием ценовых предложений)
+        "filter[kato]": "470000000",  # Мангистауская область
+        "filter[amount_to]": "1000000",  # Сумма до 1 млн
+        "filter[trade_type]": "Товар",  # Предмет закупки Товар
+        "page": 1
+    }
 
-    for page in range(1, max_pages + 1):
-        params = {
-            "filter[method][]": "3",       # Запрос ценовых предложений
-            "filter[status][]": "240",     # Опубликован (прием ценовых предложений)
-            "filter[kato]": "470000000",   # Мангистауская область
-            "filter[amount_to]": "1000000",
-            "page": page
-        }
-        print(f"Парсим страницу {page}...")
+    while True:
+        print(f"Парсим страницу {params['page']}...")
         response = requests.get(base_url, params=params)
         if response.status_code != 200:
-            print(f"Ошибка загрузки страницы {page}: статус {response.status_code}")
             break
-
         soup = BeautifulSoup(response.text, "html.parser")
-        rows = soup.select("table.table tbody tr")
+        rows = soup.select("table.table > tbody > tr")
+
         if not rows:
-            print("Лоты на странице не найдены, прерываем.")
             break
 
         for row in rows:
@@ -30,36 +35,47 @@ def parse_goszakup_filtered_debug(max_pages=3):
             if len(cols) < 7:
                 continue
 
-            title = cols[1].get_text(separator=" ", strip=True)
-            description = cols[2].get_text(separator=" ", strip=True)
+            # Данные из столбцов
+            lot_number = cols[0].get_text(strip=True)
+            name_desc = cols[1].get_text(strip=True)
             quantity = cols[3].get_text(strip=True)
-            price = cols[4].get_text(strip=True)
+            amount = cols[4].get_text(strip=True)
             method = cols[5].get_text(strip=True)
             status = cols[6].get_text(strip=True)
 
-            print(f"Заголовок: {title}")
-            print(f"Описание: {description}")
-            print(f"Метод: {method}")
-            print(f"Статус: {status}")
-            print(f"Цена: {price}")
-            print("---")
+            # Проверяем условия (если надо - можно детальнее)
+            if method == "Запрос ценовых предложений" and "прием ценовых предложений" in status.lower():
+                tender_text = (
+                    f"🔹 {name_desc}\n"
+                    f"Количество: {quantity}\n"
+                    f"Сумма: {amount} тг\n"
+                    f"Статус: {status}\n"
+                )
+                tenders.append(tender_text)
 
-            # Добавляем все лоты без фильтра по "Товар" для отладки
-            tenders.append({
-                "title": title,
-                "description": description,
-                "quantity": quantity,
-                "price": price,
-                "method": method,
-                "status": status,
-            })
+        # Проверка на следующую страницу
+        next_button = soup.select_one("ul.pagination > li.page-item.next:not(.disabled)")
+        if next_button:
+            params["page"] += 1
+        else:
+            break
 
     return tenders
 
+# Команда /goszakup для бота
+async def goszakup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Ищу тендеры...")
 
-if __name__ == "__main__":
-    tenders = parse_goszakup_filtered_debug()
-    if tenders:
-        print(f"Всего лотов за 3 страницы: {len(tenders)}")
+    tenders = parse_tenders()
+    if not tenders:
+        await update.message.reply_text("[Госзакуп] Новых тендеров нет.")
     else:
-        print("[Госзакуп] Новых тендеров нет.")
+        for tender in tenders:
+            await update.message.reply_text(tender)
+
+# Запуск бота
+if __name__ == '__main__':
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("goszakup", goszakup))
+    print("Бот запущен...")
+    app.run_polling()
